@@ -45,7 +45,7 @@ class Monitor(Wrapper):
         self.total_steps = 0
         self.current_reset_info = {}  # extra info about the current episode, that was passed in during reset()
 
-    # Resets the environment, called in trpo_mpi, at the start of a trajectory
+    # Resets the environment, called in run_mpi, at the start of a trajectory
     def reset(self, **kwargs):
         if not self.allow_early_resets and not self.needs_reset:
             raise RuntimeError(

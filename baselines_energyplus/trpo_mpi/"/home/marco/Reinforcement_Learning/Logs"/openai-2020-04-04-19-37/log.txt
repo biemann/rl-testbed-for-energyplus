@@ -1,2 +1,0 @@
-Logging to "/home/marco/Reinforcement_Learning/Logs"/openai-2020-04-04-19-37
-********** Iteration 0 ************

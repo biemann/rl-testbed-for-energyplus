@@ -4,7 +4,8 @@ Helpers for script run_energyplus.py.
 
 import os
 import gym
-from baselines import logger
+# from baselines import logger
+from stable_baselines3.common import logger
 from baselines_energyplus.bench import Monitor
 import glob
 

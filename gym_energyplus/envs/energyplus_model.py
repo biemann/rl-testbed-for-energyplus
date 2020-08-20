@@ -19,11 +19,11 @@ from matplotlib.widgets import Slider, Button
 
 class EnergyPlusModel(metaclass=ABCMeta):
 
-    def __init__(self,
-                 model_file,
-                 log_dir=None,
-                 verbose=False):
+    def __init__(self,  model_file, log_dir=None, verbose=False):
+
+        self.action_space = None
         self.log_dir = log_dir
+        self.monitor_file = None
         self.model_basename = os.path.splitext(os.path.basename(model_file))[0]
         self.setup_spaces()
         self.action = 0.5 * (self.action_space.low + self.action_space.high)
@@ -32,6 +32,9 @@ class EnergyPlusModel(metaclass=ABCMeta):
         self.verbose = verbose
         self.timestamp_csv = None
         self.sl_episode = None
+        self.fig = None
+        self.axprogress = None
+        self.axslider = None
 
         # Progress data
         self.num_episodes = 0
@@ -44,7 +47,8 @@ class EnergyPlusModel(metaclass=ABCMeta):
         pass
 
     # Parse date/time format from EnergyPlus and return datetime object with correction for 24:00 case
-    def _parse_datetime(self, dstr):
+    @staticmethod
+    def _parse_datetime(dstr):
         # ' MM/DD  HH:MM:SS' or 'MM/DD  HH:MM:SS'
         # Dirty hack
         if dstr[0] != ' ':
@@ -100,10 +104,12 @@ class EnergyPlusModel(metaclass=ABCMeta):
     def set_action(self, normalized_action):
         # In TPRO/POP1/POP2 in baseline, action seems to be normalized to [-1.0, 1.0].
         # So it must be scaled back into action_space by the environment.
+        # self.action_prev = self.action
+        # self.action = self.action_space.low + (normalized_action + 1.) * 0.5 * (
+        #         self.action_space.high - self.action_space.low)
+        # self.action = np.clip(self.action, self.action_space.low, self.action_space.high)
         self.action_prev = self.action
-        self.action = self.action_space.low + (normalized_action + 1.) * 0.5 * (
-                self.action_space.high - self.action_space.low)
-        self.action = np.clip(self.action, self.action_space.low, self.action_space.high)
+        self.action = normalized_action
 
     @abstractmethod
     def setup_spaces(self):
@@ -135,6 +141,7 @@ class EnergyPlusModel(metaclass=ABCMeta):
                 return
             print('energyplus_plot.plot log={}'.format(log_dir))
             self.log_dir = log_dir
+            self.monitor_file = self.log_dir + '/monitor.csv'
             self.show_progress()
         else:
             if not os.path.isfile(csv_file):
@@ -150,16 +157,16 @@ class EnergyPlusModel(metaclass=ABCMeta):
             self.plot_episode(csv_file)
             plt.show()
 
-    # Show convergence
+    # Corresponds to the bottom graph (convergence):
+
     def show_progress(self):
-        self.monitor_file = self.log_dir + '/monitor.csv'
 
         # Read progress file
         if not self.read_monitor_file():
             print('Progress data is missing')
             sys.exit(1)
 
-        # Initialize graph
+        # Initialize graph (Parameters for all plots)
         plt.rcdefaults()
         plt.rcParams['font.size'] = 6
         plt.rcParams['lines.linewidth'] = 1.0
@@ -171,38 +178,40 @@ class EnergyPlusModel(metaclass=ABCMeta):
         axcolor = 'lightgoldenrodyellow'
         self.axprogress = self.fig.add_axes([0.15, 0.10, 0.70, 0.15], facecolor=axcolor)
         self.axslider = self.fig.add_axes([0.15, 0.04, 0.70, 0.02], facecolor=axcolor)
-        axfirst = self.fig.add_axes([0.15, 0.01, 0.03, 0.02])
-        axlast = self.fig.add_axes([0.82, 0.01, 0.03, 0.02])
-        axprev = self.fig.add_axes([0.46, 0.01, 0.03, 0.02])
-        axnext = self.fig.add_axes([0.51, 0.01, 0.03, 0.02])
+
+        # The following, we don really care about
+        # axfirst = self.fig.add_axes([0.15, 0.01, 0.03, 0.02])
+        # axlast = self.fig.add_axes([0.82, 0.01, 0.03, 0.02])
+        # axprev = self.fig.add_axes([0.46, 0.01, 0.03, 0.02])
+        # axnext = self.fig.add_axes([0.51, 0.01, 0.03, 0.02])
 
         # Slider is drawn in plot_progress()
 
-        # First/Last button
-        self.button_first = Button(axfirst, 'First', color=axcolor, hovercolor='0.975')
-        self.button_first.on_clicked(self.first_episode_num)
-        self.button_last = Button(axlast, 'Last', color=axcolor, hovercolor='0.975')
-        self.button_last.on_clicked(self.last_episode_num)
+        # # First/Last button
+        # self.button_first = Button(axfirst, 'First', color=axcolor, hovercolor='0.975')
+        # self.button_first.on_clicked(self.first_episode_num)
+        # self.button_last = Button(axlast, 'Last', color=axcolor, hovercolor='0.975')
+        # self.button_last.on_clicked(self.last_episode_num)
+        #
+        # # Next/Prev button
+        # self.button_prev = Button(axprev, 'Prev', color=axcolor, hovercolor='0.975')
+        # self.button_prev.on_clicked(self.prev_episode_num)
+        # self.button_next = Button(axnext, 'Next', color=axcolor, hovercolor='0.975')
+        # self.button_next.on_clicked(self.next_episode_num)
 
-        # Next/Prev button
-        self.button_prev = Button(axprev, 'Prev', color=axcolor, hovercolor='0.975')
-        self.button_prev.on_clicked(self.prev_episode_num)
-        self.button_next = Button(axnext, 'Next', color=axcolor, hovercolor='0.975')
-        self.button_next.on_clicked(self.next_episode_num)
+        # Timer (No idea what this is about)
+        # self.timer = self.fig.canvas.new_timer(interval=1000)
+        # self.timer.add_callback(self.check_update)
+        # self.timer.start()
 
-        # Timer
-        self.timer = self.fig.canvas.new_timer(interval=1000)
-        self.timer.add_callback(self.check_update)
-        self.timer.start()
-
-        # Progress data
+        # Progress data (The graph below)
         self.axprogress.set_xmargin(0)
         self.axprogress.set_xlabel('Episodes')
         self.axprogress.set_ylabel('Reward')
         self.axprogress.grid(True)
         self.plot_progress()
 
-        # Plot latest episode
+        # Plot latest episode (the various graphs above)
         self.update_episode(self.num_episodes - 1)
 
         plt.show()
@@ -215,7 +224,6 @@ class EnergyPlusModel(metaclass=ABCMeta):
         # Redraw all lines
         self.axprogress.lines = []
         self.axprogress.plot(self.reward, color='#1f77b4', label='Reward')
-        # self.axprogress.plot(self.reward_mean, color='#ff7f0e', label='Reward (average)')
         self.axprogress.legend()
         # Redraw slider
         if self.sl_episode is None or int(round(self.sl_episode.val)) == self.num_episodes - 2:
@@ -290,6 +298,8 @@ class EnergyPlusModel(metaclass=ABCMeta):
             ep += 1
             self.sl_episode.set_val(ep)
 
+    # Prints data statistics (average, minimum, maximum and standard deviation)
+
     def show_statistics(self, title, series):
         print('{:25} ave={:5,.2f}, min={:5,.2f}, max={:5,.2f}, std={:5,.2f}'.format(title, np.average(series),
                                                                                     np.min(series), np.max(series),
@@ -297,6 +307,8 @@ class EnergyPlusModel(metaclass=ABCMeta):
 
     def get_statistics(self, series):
         return np.average(series), np.min(series), np.max(series), np.std(series)
+
+    # Prints the distribution of the temperatures, between 17-28 degrees for each decimal
 
     def show_distrib(self, title, series):
         dist = [0 for i in range(1000)]

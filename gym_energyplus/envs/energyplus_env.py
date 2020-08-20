@@ -57,7 +57,7 @@ class EnergyPlusEnv(Env):
         self.weather_files = weather_file.split(',')
         self.log_dir = log_dir
 
-        # Create an EnergyPlus model
+        # Create an EnergyPlus model (constructs the model, for ex of energyplus_model_2ZoneDC_HVAC_EcoFan.py)
         self.ep_model = build_ep_model(model_file=self.model_file, log_dir=self.log_dir)
 
         self.action_space = self.ep_model.action_space
